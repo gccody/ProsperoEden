@@ -52,6 +52,7 @@
 #include "dev_vulkan.h"
 #include "../src/fastmem.h"
 #include "crash_report.h"
+#include "prosperoeden/autoboot.h"
 #include "prosperoeden/frontend.h"
 #include "prosperoeden/version.h"
 extern "C" void ps5_opengl_heap_snapshot(const char*, unsigned);
@@ -414,8 +415,12 @@ int main(int argc, char** argv) {
             selected_game = SelectProsperoEdenGame(launch_error);
         }
 #else
+        // A home launcher's request to start one game, and its way back (prosperoeden/autoboot.h).
+        selected_game = Eden::Autoboot::Next(launch_error);
+        if (selected_game.empty()) {
         Eden::BootTrace::Line("opening the launcher");
         selected_game = SelectProsperoEdenGame(launch_error);
+        }
 #endif
         Eden::BootTrace::Line("launcher closed: %s", selected_game.empty() ? "no game (quit)" : "a game was chosen");
         }
@@ -1068,6 +1073,7 @@ int main(int argc, char** argv) {
                         if (pad->TakeReturnToMenu() || asked) {
                             Eden::Report("exit", "Touchpad + L1 while the game loads: leaving as soon as it can be stopped");
                             Eden::StopLimit::Begin();
+                            Eden::Autoboot::Leaving();
                             left_while_loading = true;
                             break;
                         }
@@ -1488,6 +1494,9 @@ int main(int argc, char** argv) {
                 }
                 // A game that ended itself or failed is being stopped too (stop_limit.h).
                 Eden::StopLimit::Begin();
+#ifdef PS5_NATIVE
+                Eden::Autoboot::Leaving();
+#endif
                 jit_list.Finish();  // while the JITs still exist: their block list is saved
                 // Shutdown requests cancellation before suspending cores; Pause can
                 // block while a CPU producer is waiting on a full GPU queue.
@@ -1569,7 +1578,8 @@ int main(int argc, char** argv) {
             LOG_INFO(Frontend, "EDEN_DEVICE_FRONTEND_PASS");
         }
 #ifdef PS5_NATIVE
-        if (return_to_menu) continue;
+        // A requested game that ended by itself goes back to the app that asked for it.
+        if (return_to_menu || Eden::Autoboot::Returning()) continue;
 #endif
         passed("HEADLESS_COMPLETE");
 #ifdef EDEN_DEV_PROFILE

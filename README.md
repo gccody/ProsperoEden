@@ -324,6 +324,35 @@ The touchpad is pressed as a button. On its own, a tap of the touchpad presses t
 | Touchpad + R1 | Toggle the performance HUD |
 | Touchpad + L1 | End the running game and return to the library |
 
+## Autoboot
+
+*(This fork's addition: `headless/prosperoeden/autoboot.{h,cpp}`.)* Another app, such as a home-screen launcher, can have ProsperoEden start one game directly, skipping the menu, and get control back when the game ends. The app writes `/data/homelauncher/autoboot.json`, then starts ProsperoEden (PPSA99008):
+
+```json
+{
+  "version": 1,
+  "rom": "/mnt/ext1/eden/roms/Game.nsp",
+  "return_title_id": "PPSA99009",
+  "created_unix": 1760000000
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `version` | Always `1`. |
+| `rom` | Full path of an NSP or XCI file directly in the `roms` folder of the [game files folder](#game-files-folder) in use. |
+| `return_title_id` | Optional. The title ID of the app to start when the game ends (four capital letters and five digits, not PPSA99008). Without it, the session ends as usual: Touchpad + L1 opens the Library, and a game that ends by itself closes ProsperoEden. |
+| `created_unix` | When the file was written, in seconds since 1970 (UTC). A file older than 60 seconds is ignored. |
+
+As it opens, ProsperoEden reads the file and **deletes it** first, so a request is followed once, also if the app is closed or restarted while following it. It then starts the game exactly as the Library does: the game's own settings, its updates and DLC, and its mods all apply, and it becomes the last played game.
+
+- **When the game ends** with Touchpad + L1, or by itself, ProsperoEden starts the `return_title_id` app and closes. If the stop takes longer than ten seconds and ProsperoEden restarts itself, or it crashes while stopping, the new process still goes back to that app. For this it keeps a note in `/data/prosperoeden/config/autoboot-return.json` for up to 60 seconds.
+- **When the request is not followed** (bad JSON, wrong version, stale file, ROM missing or outside `roms`, invalid title ID, keys or firmware not set up), the Library opens and shows why. When the game does not start, or fails while it runs, the Library opens with the error and nothing else is started. A crash during the game itself restarts ProsperoEden at the Library with its crash notice.
+- **When the return is refused** by the system, the Library opens and shows the error code.
+- **Without the file**, ProsperoEden opens as it always does.
+
+ProsperoEden needs filesystem access (see [Install](#install)) to see `/data/homelauncher`; without it, it opens normally. Every step is logged in `/data/prosperoeden/logs/stderr.log`, in lines that start with `[ProsperoEden] autoboot:`.
+
 ## Roadmap
 
 - **FPKG support** - install ProsperoEden as a fake package, alongside the current homebrew folder install. Each release includes a ShadowMountPlus package image (`.ffpfsc`); installing it still needs testing.
