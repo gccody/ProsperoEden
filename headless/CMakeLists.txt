@@ -2277,6 +2277,7 @@ endif()
     if(PS5_NATIVE)
         set(launcher_dir "${EDEN_PORT_DIR}/prosperoeden")
         target_sources(eden-headless PRIVATE
+            "${launcher_dir}/autoboot.cpp"
             "${launcher_dir}/runtime_shims.cpp"
             "${launcher_dir}/radio_input.c")
         target_include_directories(eden-headless PRIVATE "${launcher_dir}" "${PORT_ROOT}/third_party")
