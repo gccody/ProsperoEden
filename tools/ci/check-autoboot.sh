@@ -7,24 +7,30 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 cxx=${CXX:-clang++-18}
 work=$(mktemp -d)
-trap 'chmod -R u+w /data/homelauncher 2>/dev/null || true; rm -rf "$work"' EXIT
+trap 'chmod -R u+w /data/prosperoeden/homescreen 2>/dev/null || true; rm -rf "$work"' EXIT
 
 "$cxx" -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer \
     -I"$root/headless" -I"$root/headless/prosperoeden" \
     "$root/tools/ci/autoboot_check.cpp" "$root/headless/prosperoeden/autoboot.cpp" -o "$work/check"
+# The home screen tiles' sources as the app builds them (-Wall -Wextra -Werror), checked here in a
+# minute rather than at the end of the hour-long PS5 build.
+"$cxx" -std=c++20 -fsyntax-only -Wall -Wextra -Werror -Wno-unused-parameter -I"$root/headless" \
+    -I"$root/headless/prosperoeden" -I/usr/include/stb "$root/headless/prosperoeden/homescreen.cpp"
+"$cxx" -std=c++20 -fsyntax-only -Wall -Wextra -Werror "$root/headless/homescreen/tile/src/main.cpp"
+"${CC:-clang-18}" -std=c11 -fsyntax-only -Wall -Wextra -Werror "$root/headless/homescreen/launch_helper.c"
 
 if [[ ! -w /data ]]; then
     sudo mkdir -p /data
     sudo chown "$(id -u):$(id -g)" /data
 fi
 files=$work/eden-files
-request=/data/homelauncher/autoboot.json
+request=/data/prosperoeden/homescreen/autoboot.json
 note=/data/prosperoeden/config/autoboot-return.json
 failures=0
 
 reset() {
-    rm -rf /data/homelauncher /data/prosperoeden "$files"
-    mkdir -p /data/homelauncher /data/prosperoeden/config "$files/roms" "$files/keys"
+    rm -rf /data/prosperoeden/homescreen /data/prosperoeden "$files"
+    mkdir -p /data/prosperoeden/homescreen /data/prosperoeden/config "$files/roms" "$files/keys"
     : > "$files/roms/Game.nsp"
     : > "$files/keys/prod.keys"
     : > "$work/Outside.nsp"
@@ -58,7 +64,7 @@ expect none "first ROM=[] ERROR=[] RETURNING=0"; refuse none "autoboot:"; refuse
 
 reset; write_request "$rom" PPSA99731 0; run return session
 expect return "first ROM=[$rom] ERROR=[] RETURNING=1"
-expect return "Closing ProsperoEden; PPSA99731 starts again"; expect return EXIT; refuse return LAUNCH
+expect return "The game ended; closing ProsperoEden (the request came from PPSA99731)"; expect return EXIT; refuse return LAUNCH
 gone return "$request"; gone return "$note"
 
 reset; write_request "$rom" "" 0; run library session
@@ -102,14 +108,14 @@ expect leave LEFT
 [[ -f $note ]] || { echo "FAIL leave: no return note"; failures=$((failures + 1)); }
 run restart first
 expect restart "started again while a requested game stopped"
-expect restart "Closing ProsperoEden; PPSA99731 starts again"; expect restart EXIT; gone restart "$note"
+expect restart "The game ended; closing ProsperoEden (the request came from PPSA99731)"; expect restart EXIT; gone restart "$note"
 
 reset; printf '{"version": 1, "return_title_id": "PPSA99731", "created_unix": %s}\n' $(( $(date +%s) - 120 )) > "$note"
 run old-note first
 expect old-note "Return note not followed: it was written "; refuse old-note LAUNCH
 gone old-note "$note"
 
-reset; write_request "$rom" PPSA99731 0; chmod a-w /data/homelauncher; run locked first; chmod u+w /data/homelauncher
+reset; write_request "$rom" PPSA99731 0; chmod a-w /data/prosperoeden/homescreen; run locked first; chmod u+w /data/prosperoeden/homescreen
 expect locked "cannot be removed"; refuse locked "ROM=[$rom]"
 
 if (( failures )); then
