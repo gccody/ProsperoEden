@@ -22,7 +22,6 @@
 #include <thread>
 #include <vector>
 
-#include <stb_image.h>
 // The PNG writer the launcher's tools use (tools/launcher/stb), private to this file.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Weverything"
@@ -173,17 +172,46 @@ bool CopyIfChanged(const std::string& from, const std::string& to) {
     return !error;
 }
 
-// The cover scaled to the home screen's 512x512 (bilinear), else ProsperoEden's own icon.
-bool WriteIcon(const std::string& cover, const std::string& to) {
+// A cached cover as RGB, top row first. The covers are the TGAs metadata_bridge.cpp WriteTga
+// writes (uncompressed true colour); Eden builds stb_image with STBI_ONLY_JPEG
+// (src/common/stb.h), so stbi_load cannot read them.
+bool ReadCover(const std::string& bytes, int* width, int* height, std::vector<unsigned char>* rgb) {
+    const auto byte = [&](std::size_t at) { return static_cast<unsigned char>(bytes[at]); };
+    if (bytes.size() < 18 || byte(1) != 0 || byte(2) != 2) return false;
+    const int w = byte(12) | (byte(13) << 8);
+    const int h = byte(14) | (byte(15) << 8);
+    const int depth = byte(16) / 8;
+    const std::size_t start = 18 + byte(0); // after the image ID
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096 || (depth != 3 && depth != 4) ||
+        bytes.size() < start + static_cast<std::size_t>(w) * h * depth)
+        return false;
+    const bool top_first = (byte(17) & 0x20) != 0;
+    const bool right_first = (byte(17) & 0x10) != 0;
+    rgb->resize(static_cast<std::size_t>(w) * h * 3);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const std::size_t from = start + (static_cast<std::size_t>(top_first ? y : h - 1 - y) * w +
+                                              (right_first ? w - 1 - x : x)) * depth;
+            unsigned char* to = rgb->data() + (static_cast<std::size_t>(y) * w + x) * 3;
+            to[0] = byte(from + 2); // stored BGR(A)
+            to[1] = byte(from + 1);
+            to[2] = byte(from);
+        }
+    *width = w;
+    *height = h;
+    return true;
+}
+
+// The cover scaled to the home screen's 512x512 (bilinear), else ProsperoEden's own icon; *from_cover
+// tells which it is.
+bool WriteIcon(const std::string& cover, const std::string& to, bool* from_cover) {
+    *from_cover = false;
     std::string bytes;
     if (!cover.empty() && Settings::ReadFile(cover, bytes) && !bytes.empty()) {
         int width = 0;
         int height = 0;
-        int channels = 0;
-        // From memory, as metadata_bridge.cpp reads pictures.
-        stbi_uc* pixels = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(bytes.data()),
-                                                static_cast<int>(bytes.size()), &width, &height, &channels, 3);
-        if (pixels != nullptr && width > 0 && height > 0) {
+        std::vector<unsigned char> pixels;
+        if (ReadCover(bytes, &width, &height, &pixels)) {
             std::vector<unsigned char> icon(static_cast<std::size_t>(kIconSide) * kIconSide * 3);
             for (int y = 0; y < kIconSide; ++y) {
                 const float fy = std::max(0.0f, (y + 0.5f) * height / kIconSide - 0.5f);
@@ -206,14 +234,16 @@ bool WriteIcon(const std::string& cover, const std::string& to) {
                     }
                 }
             }
-            stbi_image_free(pixels);
             const std::string staged = to + ".tmp";
             if (stbi_write_png(staged.c_str(), kIconSide, kIconSide, 3, icon.data(), kIconSide * 3) != 0 &&
-                std::rename(staged.c_str(), to.c_str()) == 0)
+                std::rename(staged.c_str(), to.c_str()) == 0) {
+                *from_cover = true;
                 return true;
+            }
             std::remove(staged.c_str());
-        } else if (pixels != nullptr) {
-            stbi_image_free(pixels);
+            Say(cover + ": the icon could not be written; ProsperoEden's is used");
+        } else {
+            Say(cover + ": not a cover this can read; ProsperoEden's icon is used");
         }
     }
     return CopyIfChanged(AppFile("sce_sys/icon0.png"), to);
@@ -253,14 +283,21 @@ bool WriteProgram(const std::string& folder) {
            CopyIfChanged(AppFile("homescreen/launch-helper.elf"), folder + "/launch-helper.elf");
 }
 
-bool WriteTile(const std::string& title, const Game& game) {
+// *with_cover: whether its icon is the game's cover.
+bool WriteTile(const std::string& title, const Game& game, bool* with_cover) {
     const std::string folder = TileFolder(title);
     std::error_code error;
     fs::create_directories(folder + "/sce_sys", error);
     (void)chmod(folder.c_str(), 0777);
     return WriteProgram(folder) && Settings::WriteFile(folder + "/sce_sys/param.json", ParamJson(title, game.name)) &&
-           WriteIcon(game.cover, folder + "/sce_sys/icon0.png") &&
+           WriteIcon(game.cover, folder + "/sce_sys/icon0.png", with_cover) &&
            Settings::WriteFile(folder + "/rom.txt", AssetsPath("roms/" + game.file) + "\n");
+}
+
+// Whether a tile carries ProsperoEden's icon: the first tiles were recorded with their cover when it
+// could not be read.
+bool IconIsProsperoEdens(const std::string& title) {
+    return SameFile(TileFolder(title) + "/sce_sys/icon0.png", AppFile("sce_sys/icon0.png"));
 }
 
 // ---- the record of tiles: config/homescreen.json ----
@@ -386,15 +423,17 @@ void Sync() {
             changed = true;
             continue;
         }
+        if (tile.cover && IconIsProsperoEdens(tile.title)) tile.cover = false;
         const bool better_icon = !tile.cover && !game->cover.empty();
         if (better_icon || tile.name != game->name) {
             // The home screen keeps what it took at registration: register it again.
-            if (WriteTile(tile.title, *game)) {
+            bool with_cover = false;
+            if (WriteTile(tile.title, *game, &with_cover) && (with_cover || tile.name != game->name)) {
                 Unregister(tile.title);
                 const Json add = Call("/api/v1/manual/add", {{"path", folder}});
                 if (!Succeeded(add)) Say(tile.title + ": not listed again (" + Failure(add) + ")");
                 tile.name = game->name;
-                tile.cover = !game->cover.empty();
+                tile.cover = with_cover;
                 ++refreshed;
                 changed = true;
             }
@@ -412,7 +451,8 @@ void Sync() {
         } while (used.count(title) && number <= 99999);
         if (number > 99999) break;
         used.insert(title);
-        if (!WriteTile(title, game)) {
+        bool with_cover = false;
+        if (!WriteTile(title, game, &with_cover)) {
             Say(std::string(title) + " (" + game.name + "): the tile could not be written");
             fs::remove_all(TileFolder(title), error);
             continue;
@@ -423,7 +463,7 @@ void Sync() {
             fs::remove_all(TileFolder(title), error);
             continue;
         }
-        next.push_back(Tile{game.file, title, game.name, !game.cover.empty(), false});
+        next.push_back(Tile{game.file, title, game.name, with_cover, false});
         ++added;
         changed = true;
     }
