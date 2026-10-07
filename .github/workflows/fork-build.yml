@@ -4,6 +4,8 @@ name: Fork build
 # without the self-hosted `prosperoeden` runner release.yml needs. The checkout goes into a
 # subfolder so the sibling repositories the build fetches (../) land in the workspace.
 on:
+  push:
+    branches: ['autoboot-ci']
   workflow_dispatch:
 
 permissions:
