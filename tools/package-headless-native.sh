@@ -55,6 +55,12 @@ make -s -C "$root/headless/self_update_helper" PS5_PAYLOAD_SDK="$template/.deps/
     OUTPUT="$root/build/self-update/self-updater.elf"
 python3 "$root/tools/validate-loader-elf.py" "$root/build/self-update/self-updater.elf"
 cp "$root/build/self-update/self-updater.elf" "$app/self-updater.elf"
+# What each game's home screen tile carries (headless/prosperoeden/homescreen.h): the tile program
+# and the launch helper payload, copied into the tiles by the app.
+bash "$root/headless/homescreen/build.sh"
+rm -rf "$app/homescreen"
+mkdir -p "$app/homescreen"
+cp "$root/build/homescreen/"{eboot.bin,libc.prx,launch-helper.elf} "$app/homescreen/"
 cp "$root/sce_sys/"{param.json,icon0.png,pic0.dds,pic1.dds,snd0.at9} "$app/sce_sys/"
 rm -rf "$app/ui"
 cp -a "$root/headless/prosperoeden/ui" "$app/ui"
