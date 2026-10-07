@@ -19,13 +19,6 @@
 #include <utility>
 
 extern "C" {
-// libSceSystemService: start an installed app by its title ID. Declared as SharpProspero binds it
-// (src/SharpProspero/Interop/SystemService/SystemService.cs) and called as the launch worker of
-// unjail-ps5app-payload does (Program.cs, LaunchWorkerEntry): an argv holding only its NULL, and
-// the context below with the foreground user.
-int sceSystemServiceLaunchApp(const char* title_id, const char** argv, void* context);
-int sceUserServiceInitialize(const void* parameters);
-int sceUserServiceGetForegroundUser(int* user);
 // src/lifecycle.c: returns only when the system refuses.
 int eden_exit_app(void);
 }
@@ -41,21 +34,6 @@ constexpr const char* kOwnTitle = "PPSA99008";
 constexpr long long kMaxAgeSeconds = 60;
 constexpr long long kMaxAheadSeconds = 5;
 constexpr std::size_t kMaxFileBytes = 4096;
-
-// sceSystemServiceLaunchApp's launch context: 0x20 bytes (SharpProspero
-// src/SharpProspero/Platform/AppLauncher.cs, SceAppLaunchCtx).
-struct LaunchContext {
-    std::uint32_t size;
-    std::int32_t user_id;
-    std::uint32_t app_opt;
-    std::uint32_t reserved;
-    std::uint64_t crash_report;
-    std::uint32_t check_flag;
-    std::uint32_t padding;
-};
-static_assert(sizeof(LaunchContext) == 0x20 && offsetof(LaunchContext, user_id) == 0x04 &&
-              offsetof(LaunchContext, app_opt) == 0x08 && offsetof(LaunchContext, crash_report) == 0x10 &&
-              offsetof(LaunchContext, check_flag) == 0x18);
 
 bool first = true;
 bool active = false;       // the game running, or the one that just ended, was requested
@@ -150,36 +128,15 @@ void Say(std::string& launch_error, const std::string& text) {
     if (launch_error.empty()) launch_error = "Autoboot: " + text;
 }
 
-// Starts the app and ends this process. Returns only when either was refused; why says which.
-bool StartApp(const std::string& title, std::string* why) {
-    (void)sceUserServiceInitialize(nullptr);  // done already when a game ran: refused, harmless
-    int user = -1;
-    const int user_rc = sceUserServiceGetForegroundUser(&user);
-    if (user_rc < 0 || user < 0) {
-        *why = "no foreground user (" + Hex(user_rc) + ")";
-        return false;
-    }
-    LaunchContext context{};
-    context.size = sizeof(context);
-    context.user_id = user;
-    const char* argv[] = {nullptr};
-    Report("autoboot", ("Starting " + title + " for user " + std::to_string(user)).c_str());
-    std::fflush(nullptr);
-    const int rc = sceSystemServiceLaunchApp(title.c_str(), argv, &context);
-    if (rc < 0) {
-        *why = "the system refused to start it (" + Hex(rc) + ")";
-        return false;
-    }
-    Report("autoboot", (title + " started (" + Hex(rc) + "); closing ProsperoEden").c_str());
+// The way back: ProsperoEden closes, and the app that asked starts again. The console refuses to
+// start a title from inside a running app (0x80940010 on firmware 13.60), so the asking app does
+// that from outside: its helper payload waits for this process to end (the home launcher's
+// tools/payloads/launch_helper.c). Returns only when the system refused to close the app.
+std::string Return(const std::string& title, std::string& launch_error) {
+    Report("autoboot", ("Closing ProsperoEden; " + title + " starts again").c_str());
     std::fflush(nullptr);
     const int refused = eden_exit_app();
-    *why = title + " was started, but ProsperoEden could not close (" + Hex(refused) + ")";
-    return false;
-}
-
-std::string Return(const std::string& title, std::string& launch_error) {
-    std::string why;
-    if (!StartApp(title, &why)) Say(launch_error, "Could not return to " + title + ": " + why);
+    Say(launch_error, "ProsperoEden could not close to return to " + title + " (" + Hex(refused) + ")");
     return {};
 }
 
