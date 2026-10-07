@@ -6,8 +6,10 @@
 //
 // and then starts ProsperoEden. ProsperoEden takes the file away as it opens and starts the game
 // the way the Library does (the game's own settings, its updates, DLC and mods all apply). When
-// the game ends (Touchpad + L1, or the game ending by itself) the app named by return_title_id is
-// started and ProsperoEden closes. Without the file, ProsperoEden opens as it always does.
+// the game ends (Touchpad + L1, or the game ending by itself) with a return_title_id, ProsperoEden
+// closes and the app that asked starts itself again from outside (the console refuses starts from
+// inside an app; a home launcher does it with a payload that waits for ProsperoEden to end).
+// Without the file, ProsperoEden opens as it always does.
 //
 // A request is followed only when it is complete and less than a minute old, its ROM is in the
 // roms folder of the game files folder in use, and the keys and firmware are set up. Otherwise
