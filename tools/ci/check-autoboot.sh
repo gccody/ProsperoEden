@@ -58,7 +58,7 @@ expect none "first ROM=[] ERROR=[] RETURNING=0"; refuse none "autoboot:"; refuse
 
 reset; write_request "$rom" PPSA99731 0; run return session
 expect return "first ROM=[$rom] ERROR=[] RETURNING=1"
-expect return "LAUNCH PPSA99731 argv0=null size=0x20 user=0x10000001"; expect return EXIT
+expect return "Closing ProsperoEden; PPSA99731 starts again"; expect return EXIT; refuse return LAUNCH
 gone return "$request"; gone return "$note"
 
 reset; write_request "$rom" "" 0; run library session
@@ -102,16 +102,12 @@ expect leave LEFT
 [[ -f $note ]] || { echo "FAIL leave: no return note"; failures=$((failures + 1)); }
 run restart first
 expect restart "started again while a requested game stopped"
-expect restart "LAUNCH PPSA99731"; expect restart EXIT; gone restart "$note"
+expect restart "Closing ProsperoEden; PPSA99731 starts again"; expect restart EXIT; gone restart "$note"
 
 reset; printf '{"version": 1, "return_title_id": "PPSA99731", "created_unix": %s}\n' $(( $(date +%s) - 120 )) > "$note"
 run old-note first
 expect old-note "Return note not followed: it was written "; refuse old-note LAUNCH
 gone old-note "$note"
-
-reset; write_request "$rom" PPSA99731 0; out=$(LAUNCH_RC=0x80020001 "$work/check" session 2>&1)
-expect refused "LAUNCH PPSA99731"; refuse refused EXIT
-expect refused "after ROM=[] ERROR=[Autoboot: Could not return to PPSA99731: the system refused to start it (0x80020001)]"
 
 reset; write_request "$rom" PPSA99731 0; chmod a-w /data/homelauncher; run locked first; chmod u+w /data/homelauncher
 expect locked "cannot be removed"; refuse locked "ROM=[$rom]"
@@ -121,5 +117,5 @@ if (( failures )); then
     exit 1
 fi
 echo "Autoboot check PASS: no request, return, Library, stale, future, bad JSON, version, missing ROM,"
-echo "ROM outside roms, own and short return IDs, setup, failed game, restart note, old note, refused"
-echo "return, undeletable request"
+echo "ROM outside roms, own and short return IDs, setup, failed game, restart note, old note"
+echo "undeletable request (the way back: ProsperoEden closes, no launch from inside the app)"
