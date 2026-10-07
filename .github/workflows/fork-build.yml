@@ -39,9 +39,57 @@ jobs:
           meson --version
           cd ProsperoEden && make toolchain
 
+      # Dependencies, RADV and the compiler cache from the last run of this branch: a rebuild
+      # after a failure is minutes, not an hour.
+      - name: Restore build inputs
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/ccache
+            ~/.cache/prosperoeden-deps
+            ps5-native-app-boilerplate
+            mihawk-vulkan-review
+            mihawk-mesa-review
+            mihawk-sdk-review
+            ProsperoEden/.deps
+          key: fork-build-${{ hashFiles('ProsperoEden/tools/deps.json') }}-${{ github.run_id }}
+          restore-keys: fork-build-${{ hashFiles('ProsperoEden/tools/deps.json') }}-
+
       - name: Build the app (make package)
+        id: build
         working-directory: ProsperoEden
         run: make package JOBS=4
+
+      - name: Save build inputs
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cache/ccache
+            ~/.cache/prosperoeden-deps
+            ps5-native-app-boilerplate
+            mihawk-vulkan-review
+            mihawk-mesa-review
+            mihawk-sdk-review
+            ProsperoEden/.deps
+          key: fork-build-${{ hashFiles('ProsperoEden/tools/deps.json') }}-${{ github.run_id }}
+
+      - name: Symbol diagnostics
+        if: failure()
+        run: |
+          set +e
+          for tool in clang clang-18 ld.lld ld.lld-18 objcopy nm; do
+            printf '%s: ' "$tool"; command -v "$tool" && "$tool" --version | head -1
+          done
+          cat ps5-native-app-boilerplate/.deps/native/ps5-payload-sdk/bin/prospero-lld 2>/dev/null | head -20
+          for archive in mihawk-vulkan-review/.deps/native/radv-release/lib/libvulkan_radeon.ps5.a \
+                         ProsperoEden/build/radv-isolated/libvulkan_radeon.ps5.a; do
+            echo "== $archive"
+            llvm-readelf-18 -s --wide "$archive" | grep -E 'File:|EnumeratePhysicalDevices' | grep -B1 Enumerate | head -20
+          done
+          elf=$(ls -t ProsperoEden/build/headless-native/*.elf 2>/dev/null | head -1)
+          echo "== $elf"
+          llvm-readelf-18 --dyn-syms --wide "$elf" | grep -v ' UND .*sce\|FUNC    GLOBAL DEFAULT  UND [a-z_]*$' | grep UND | head -40
 
       - name: Upload the app folder
         uses: actions/upload-artifact@v4
