@@ -26,7 +26,7 @@ cp "$template/dist/$title/eboot.bin" "$output/eboot.bin"
 cp "$template/dist/$title/sce_module/libc.prx" "$output/libc.prx"
 
 sdk="$template/.deps/native/ps5-payload-sdk"
-"$sdk/bin/prospero-clang" -std=c11 -O2 -Wall -Wextra -Werror -o "$output/launch-helper.elf" \
+"$sdk/bin/prospero-clang" -std=gnu11 -O2 -Wall -Wextra -Werror -o "$output/launch-helper.elf" \
     "$root/headless/homescreen/launch_helper.c" -lSceSystemService -lSceUserService
 python3 "$root/tools/validate-loader-elf.py" "$output/launch-helper.elf"
 sha256sum "$output/eboot.bin" "$output/libc.prx" "$output/launch-helper.elf"
