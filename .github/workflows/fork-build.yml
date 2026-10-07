@@ -42,8 +42,24 @@ jobs:
           # points out of the import table. LLVM 18 stays for the host tools ProsperoEden checks.
           wget -q https://apt.llvm.org/llvm.sh
           sudo bash llvm.sh 22
+          sudo apt-get install --yes llvm-22-dev libclang-22-dev libclang-cpp22-dev libclc-22-dev \
+            libpolly-22-dev
           llvm-config-22 --version && ld.lld-22 --version
           cd ProsperoEden && make toolchain
+
+      # Mesa's mesa_clc (built natively against the newest LLVM, now 22) needs the SPIR-V LLVM
+      # translator of the same LLVM version; Ubuntu 24.04 packages only 18's.
+      - name: SPIR-V LLVM translator 22
+        run: |
+          git clone -q --depth 1 -b v22.1.7 https://github.com/KhronosGroup/SPIRV-LLVM-Translator.git spirv-translator
+          cmake -S spirv-translator -B spirv-translator/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_DIR=/usr/lib/llvm-22/lib/cmake/llvm -DLLVM_SPIRV_BUILD_EXTERNAL=YES \
+            -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_SHARED_LIBS=ON -DLLVM_INCLUDE_TESTS=OFF
+          cmake --build spirv-translator/build -j4
+          sudo cmake --install spirv-translator/build
+          sudo ldconfig
+          pkg-config --modversion LLVMSPIRVLib
+          rm -rf spirv-translator
 
       # Dependencies, RADV and the compiler cache from the last run of this branch: a rebuild
       # after a failure is minutes, not an hour.
