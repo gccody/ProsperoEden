@@ -4,6 +4,7 @@
 #include "assets_dir.h"
 #include "crash_report.h"
 #include "diagnostics.h"
+#include "homescreen.h"
 #include "metadata_bridge.h"
 #include "mods.h"
 #include "profiles.h"
@@ -479,6 +480,8 @@ std::vector<pe::ui::Game> EdenServices::games() {
     }
     std::sort(games.begin(), games.end(),
               [](const pe::ui::Game& a, const pe::ui::Game& b) { return a.name < b.name; });
+    // The covers and names just read reach the home screen tiles now, not at the next start.
+    Eden::HomeScreen::SyncInBackground();
     return games;
 }
 
