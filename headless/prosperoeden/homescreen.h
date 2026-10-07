@@ -11,9 +11,11 @@
 // manual install list through its HTTP API on 127.0.0.1:10101 (docs/api.md), and it accepts FAKE
 // title IDs for homebrew (src/sm_gameinfo.c is_supported_game_title_id).
 //
-// The tiles follow the folder each time the launcher opens: a new game gets a tile, a game that is
-// gone loses its tile, a tile whose cover has appeared since (the Library extracts covers) or
-// whose name changed is registered again. A tile deleted from the home screen stays deleted
+// The tiles follow the folder each time the launcher opens and each time the Library has read the
+// games: a new game gets a tile, a game that is gone loses its tile, a tile whose cover has
+// appeared since (the Library extracts covers) or whose name changed is registered again. Its
+// icon is the cover the Library cached, read here (Eden's stb_image reads only JPEG, not those
+// TGAs); a tile that got ProsperoEden's icon instead is registered again. A tile deleted from the home screen stays deleted
 // (ShadowMountPlus takes it off its list; config/homescreen.json remembers it). Off with
 // "home_screen_tiles": false in config/prosperoeden.json. Every step is in stderr.log, in lines
 // that start with "[ProsperoEden] home screen:".
