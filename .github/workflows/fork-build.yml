@@ -37,6 +37,12 @@ jobs:
           # puts /usr/local/bin first.
           sudo pip3 install --break-system-packages 'meson>=1.4,<2'
           meson --version
+          # The SDK wrappers (prospero-clang, prospero-lld) use the newest LLVM installed; RADV is
+          # built upstream with Clang 22, whose PlayStation target keeps Mesa's hidden weak entry
+          # points out of the import table. LLVM 18 stays for the host tools ProsperoEden checks.
+          wget -q https://apt.llvm.org/llvm.sh
+          sudo bash llvm.sh 22
+          llvm-config-22 --version && ld.lld-22 --version
           cd ProsperoEden && make toolchain
 
       # Dependencies, RADV and the compiler cache from the last run of this branch: a rebuild
@@ -52,8 +58,8 @@ jobs:
             mihawk-mesa-review
             mihawk-sdk-review
             ProsperoEden/.deps
-          key: fork-build-${{ hashFiles('ProsperoEden/tools/deps.json') }}-${{ github.run_id }}
-          restore-keys: fork-build-${{ hashFiles('ProsperoEden/tools/deps.json') }}-
+          key: fork-build-llvm22-${{ hashFiles('ProsperoEden/tools/deps.json') }}-${{ github.run_id }}
+          restore-keys: fork-build-llvm22-${{ hashFiles('ProsperoEden/tools/deps.json') }}-
 
       - name: Build the app (make package)
         id: build
@@ -72,7 +78,7 @@ jobs:
             mihawk-mesa-review
             mihawk-sdk-review
             ProsperoEden/.deps
-          key: fork-build-${{ hashFiles('ProsperoEden/tools/deps.json') }}-${{ github.run_id }}
+          key: fork-build-llvm22-${{ hashFiles('ProsperoEden/tools/deps.json') }}-${{ github.run_id }}
 
       - name: Symbol diagnostics
         if: failure()
