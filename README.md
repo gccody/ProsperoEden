@@ -324,15 +324,35 @@ The touchpad is pressed as a button. On its own, a tap of the touchpad presses t
 | Touchpad + R1 | Toggle the performance HUD |
 | Touchpad + L1 | End the running game and return to the library |
 
-## Autoboot
+## Home screen tiles
 
-*(This fork's addition: `headless/prosperoeden/autoboot.{h,cpp}`.)* Another app, such as a home-screen launcher, can have ProsperoEden start one game directly, skipping the menu, and get control back when the game ends. The app writes `/data/homelauncher/autoboot.json`, then starts ProsperoEden (PPSA99008):
+*(This fork's addition: `headless/prosperoeden/homescreen.{h,cpp}`, `headless/prosperoeden/autoboot.{h,cpp}` and `headless/homescreen/`.)* Every game in the `roms` folder of the [game files folder](#game-files-folder) gets a tile of its own on the PS5 home screen, with its name and cover. Choosing a tile starts ProsperoEden straight into that game, without its menu; when the game ends (Touchpad + L1, or the game quitting) ProsperoEden closes and you are back on the home screen.
+
+**What it needs:**
+
+- [ShadowMountPlus 1.7](https://github.com/drakmor/ShadowMountPlus) (1.7beta4 or newer) running, with its HTTP API on `127.0.0.1:10101` (its default). It puts the tiles on the home screen.
+- The ELF loader on TCP port 9021, as for the rest of ProsperoEden. A tile uses it to start ProsperoEden: the console refuses to start a title from inside another app (`0x80940010` on firmware 13.60), so the tile sends a small launch helper payload there, closes, and the helper starts ProsperoEden.
+- ProsperoEden closed when you choose a tile. If it is open in the background, the helper cannot start it and says so in a notification.
+
+**How the tiles are kept:** each time ProsperoEden opens its menu, it brings the tiles up to date in the background:
+
+- A new game gets a tile: a small app in `/data/prosperoeden/homescreen/tiles/FAKEnnnnn/` (about 1.5 MB). Its title ID uses the `FAKE` prefix ShadowMountPlus accepts for homebrew, numbered from `FAKE10001` and never one the console already has. The tile is added to ShadowMountPlus's manual install list, and the home screen shows it after ShadowMountPlus's next scan (up to about 30 seconds).
+- Its picture is the game's cover from the Library's cache (`/data/prosperoeden/covers`). A game whose cover has not been read yet shows ProsperoEden's icon until you open the Library once; the tile is then registered again with the cover. The same happens when a game's name changes.
+- A game removed from `roms` loses its tile (uninstalled through ShadowMountPlus).
+- A tile you delete from the home screen stays deleted. ProsperoEden remembers it in `config/homescreen.json`; delete that file to have every tile made again.
+- Turn the tiles off with `"home_screen_tiles": false` in `config/prosperoeden.json`. Tiles that exist stay until you delete them.
+
+Steps are logged in `/data/prosperoeden/logs/stderr.log` (`[ProsperoEden] home screen:`), what a tile did in `logs/homescreen-tile.log`, and what the launch helper did in `logs/homescreen-helper.log`.
+
+### The request a tile writes
+
+A tile writes `/data/prosperoeden/homescreen/autoboot.json`, which ProsperoEden reads as it opens:
 
 ```json
 {
   "version": 1,
   "rom": "/mnt/ext1/eden/roms/Game.nsp",
-  "return_title_id": "PPSA99009",
+  "return_title_id": "FAKE10001",
   "created_unix": 1760000000
 }
 ```
@@ -340,19 +360,17 @@ The touchpad is pressed as a button. On its own, a tap of the touchpad presses t
 | Field | Meaning |
 |---|---|
 | `version` | Always `1`. |
-| `rom` | Full path of an NSP or XCI file directly in the `roms` folder of the [game files folder](#game-files-folder) in use. |
-| `return_title_id` | Optional. The title ID of the app to go back to when the game ends (four capital letters and five digits, not PPSA99008): ProsperoEden closes then. Without it, the session ends as usual: Touchpad + L1 opens the Library, and a game that ends by itself closes ProsperoEden. |
-| `created_unix` | When the file was written, in seconds since 1970 (UTC). A file older than 60 seconds is ignored. |
+| `rom` | Full path of an NSP or XCI file directly in the `roms` folder of the game files folder in use. |
+| `return_title_id` | Optional. The app that asked (four capital letters and five digits, not PPSA99008). With it, ProsperoEden closes when the game ends. Without it, the session ends as usual: Touchpad + L1 opens the Library, and a game that ends by itself closes ProsperoEden. |
+| `created_unix` | When the file was written, in the console's seconds since 1970. A file older than 60 seconds is ignored. |
 
 As it opens, ProsperoEden reads the file and **deletes it** first, so a request is followed once, also if the app is closed or restarted while following it. It then starts the game exactly as the Library does: the game's own settings, its updates and DLC, and its mods all apply, and it becomes the last played game.
 
-- **When the game ends** with Touchpad + L1, or by itself, and the request names a `return_title_id`, ProsperoEden closes. Starting that app again is the asking app's part: the console refuses to start a title from inside a running app (`0x80940010` on firmware 13.60), so it is done from a payload sent to the ELF loader that waits for ProsperoEden to end, as [PS5 Custom Launcher](https://github.com/gccody/ps5-custom-launcher)'s launch helper does (the same payload starts ProsperoEden in the first place). If the stop takes longer than ten seconds and ProsperoEden restarts itself, or it crashes while stopping, the new process closes too. For this it keeps a note in `/data/prosperoeden/config/autoboot-return.json` for up to 60 seconds.
-- **The asking app's folder** (`/data/homelauncher`) must let ProsperoEden delete the request: if the launcher runs as root and ProsperoEden does not (its access can come from ShadowMountPlus), the folder needs mode 0777. A request that cannot be deleted is not followed.
-- **When the request is not followed** (bad JSON, wrong version, stale file, ROM missing or outside `roms`, invalid title ID, keys or firmware not set up), the Library opens and shows why. When the game does not start, or fails while it runs, the Library opens with the error and nothing else is started. A crash during the game itself restarts ProsperoEden at the Library with its crash notice.
-- **When ProsperoEden cannot close** to go back, the Library opens and shows the error code.
+- **When the game ends** and the request names the app that asked, ProsperoEden closes. If the stop takes longer than ten seconds and ProsperoEden restarts itself, or it crashes while stopping, the new process closes too: for this it keeps a note in `/data/prosperoeden/config/autoboot-return.json` for up to 60 seconds.
+- **When the request is not followed** (bad JSON, wrong version, stale file, ROM missing or outside `roms`, invalid title ID, keys or firmware not set up, or the file cannot be deleted), the Library opens and shows why. When the game does not start, or fails while it runs, the Library opens with the error.
 - **Without the file**, ProsperoEden opens as it always does.
 
-ProsperoEden needs filesystem access (see [Install](#install)) to see `/data/homelauncher`; without it, it opens normally. Every step is logged in `/data/prosperoeden/logs/stderr.log`, in lines that start with `[ProsperoEden] autoboot:`.
+ProsperoEden needs filesystem access (see [Install](#install)) to see `/data/prosperoeden/homescreen`; without it, it opens normally. These steps are logged in `stderr.log` as `[ProsperoEden] autoboot:`.
 
 ## Roadmap
 

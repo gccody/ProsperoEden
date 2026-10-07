@@ -27,7 +27,7 @@ namespace Eden::Autoboot {
 namespace {
 using Json = Settings::Json;
 
-constexpr const char* kRequestFile = "/data/homelauncher/autoboot.json";
+constexpr const char* kRequestFile = "/data/prosperoeden/homescreen/autoboot.json";
 constexpr const char* kOwnTitle = "PPSA99008";
 // A request (and the note a stopping game leaves) is followed for a minute after it was written:
 // a file left behind by an app that never started ProsperoEden does not start a game days later.
@@ -128,15 +128,14 @@ void Say(std::string& launch_error, const std::string& text) {
     if (launch_error.empty()) launch_error = "Autoboot: " + text;
 }
 
-// The way back: ProsperoEden closes, and the app that asked starts again. The console refuses to
-// start a title from inside a running app (0x80940010 on firmware 13.60), so the asking app does
-// that from outside: its helper payload waits for this process to end (the home launcher's
-// tools/payloads/launch_helper.c). Returns only when the system refused to close the app.
+// The way back: ProsperoEden closes, and the console shows its home screen again. (Starting the app
+// that asked is not done from here: the console refuses to start a title from inside a running app,
+// 0x80940010 on firmware 13.60.) Returns only when the system refused to close the app.
 std::string Return(const std::string& title, std::string& launch_error) {
-    Report("autoboot", ("Closing ProsperoEden; " + title + " starts again").c_str());
+    Report("autoboot", ("The game ended; closing ProsperoEden (the request came from " + title + ")").c_str());
     std::fflush(nullptr);
     const int refused = eden_exit_app();
-    Say(launch_error, "ProsperoEden could not close to return to " + title + " (" + Hex(refused) + ")");
+    Say(launch_error, "ProsperoEden could not close after the game (" + Hex(refused) + ")");
     return {};
 }
 
@@ -160,7 +159,7 @@ std::string FirstStart(std::string& launch_error) {
     const Json request = Take(kRequestFile, &present, &why);
     if (!present) {
         if (!FilesystemAccess())
-            Report("autoboot", "No filesystem access: a request in /data/homelauncher cannot be seen");
+            Report("autoboot", "No filesystem access: a request in /data/prosperoeden/homescreen cannot be seen");
         return {};
     }
     const std::string rom = String(request, "rom");
