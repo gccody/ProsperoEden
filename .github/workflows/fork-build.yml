@@ -1,0 +1,49 @@
+name: Fork build
+
+# The PS5 app (make package: build/release/PPSA99008) on a GitHub-hosted runner, for a fork
+# without the self-hosted `prosperoeden` runner release.yml needs. The checkout goes into a
+# subfolder so the sibling repositories the build fetches (../) land in the workspace.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/local/.ghcup || true
+          df -h /
+
+      - uses: actions/checkout@v4
+        with:
+          path: ProsperoEden
+
+      - name: Install host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang-18 lld-18 llvm-18 llvm-18-dev cmake ninja-build ccache make \
+            nasm meson rsync git glslang-tools spirv-tools bison flex curl wget unzip tar \
+            python3-venv python3-mako python3-yaml pkg-config zlib1g-dev
+          cd ProsperoEden && make toolchain
+
+      - name: Build the app (make package)
+        working-directory: ProsperoEden
+        run: make package JOBS=4
+
+      - name: Upload the app folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: PPSA99008-${{ github.sha }}
+          path: ProsperoEden/build/release/PPSA99008
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Disk use after the build
+        if: always()
+        run: df -h /
