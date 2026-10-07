@@ -18,7 +18,8 @@ OUT = ROOT / 'build/headless-native'
 BASE_REQUIRED = {'eboot.bin', 'core-homebrew.nro', 'sce_module/libc.prx',
             'sce_sys/param.json', 'sce_sys/icon0.png', 'sce_sys/pic0.dds', 'sce_sys/pic1.dds',
             'sce_sys/snd0.at9', 'lapy.elf', 'lapy-manifest.json', 'licenses/Lapy-MIT.txt',
-            'self-updater.elf'}
+            'self-updater.elf', 'homescreen/eboot.bin', 'homescreen/libc.prx',
+            'homescreen/launch-helper.elf'}
 REQUIRED = set(BASE_REQUIRED)
 REQUIRED.update(p.relative_to(APP).as_posix() for p in (APP / 'ui').rglob('*') if p.is_file())
 RECEIPT = ROOT / 'HEADLESS_CANDIDATE.json'
