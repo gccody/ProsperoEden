@@ -17,7 +17,7 @@ trap 'chmod -R u+w /data/prosperoeden/homescreen 2>/dev/null || true; rm -rf "$w
 "$cxx" -std=c++20 -fsyntax-only -Wall -Wextra -Werror -Wno-unused-parameter -I"$root/headless" \
     -I"$root/headless/prosperoeden" -I/usr/include/stb "$root/headless/prosperoeden/homescreen.cpp"
 "$cxx" -std=c++20 -fsyntax-only -Wall -Wextra -Werror "$root/headless/homescreen/tile/src/main.cpp"
-"${CC:-clang-18}" -std=c11 -fsyntax-only -Wall -Wextra -Werror "$root/headless/homescreen/launch_helper.c"
+"${CC:-clang-18}" -std=gnu11 -fsyntax-only -Wall -Wextra -Werror "$root/headless/homescreen/launch_helper.c"
 
 if [[ ! -w /data ]]; then
     sudo mkdir -p /data
