@@ -151,8 +151,9 @@ bool send_helper(const char* path) {
     }
     constexpr int kSocketLevel = 0xffff;
     constexpr int kTimeoutUs = 5'000'000;
-    for (const int option : {0x1105, 0x1106})
-        (void)sceNetSetsockopt(socket, kSocketLevel, option, &kTimeoutUs, sizeof(kTimeoutUs));
+    // Send and receive timeouts (SO_SNDTIMEO, SO_RCVTIMEO), as the elevation client sets them.
+    (void)sceNetSetsockopt(socket, kSocketLevel, 0x1105, &kTimeoutUs, sizeof(kTimeoutUs));
+    (void)sceNetSetsockopt(socket, kSocketLevel, 0x1106, &kTimeoutUs, sizeof(kTimeoutUs));
     constexpr std::uint16_t kPort = 9021;
     const NetSockaddrIn loader{sizeof(NetSockaddrIn), 2,
                                static_cast<std::uint16_t>((kPort << 8) | (kPort >> 8)), 0x0100007f, 0, {0}};
