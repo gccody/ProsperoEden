@@ -2285,6 +2285,7 @@ endif()
             set(launcher_sources
                 "${launcher_dir}/frontend.cpp"
                 "${launcher_dir}/eden_services.cpp"
+                "${launcher_dir}/homescreen.cpp"
                 "${launcher_dir}/pe/audio/mixer.cpp"
                 "${launcher_dir}/pe/audio/sounds.cpp"
                 "${launcher_dir}/pe/audio/wav.cpp"

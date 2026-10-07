@@ -8,6 +8,7 @@
 #include "audio_out_init.h"
 #include "diagnostics.h"
 #include "eden_services.h"
+#include "homescreen.h"
 #include "update_notice.h"
 #include "pe/audio/sounds.hpp"
 #include "pe/core/file.hpp"
@@ -164,6 +165,8 @@ int SaveCapture(const std::string& path, int width, int height) {
 
 std::string RunApp(const std::string& launch_error, bool first_start) {
     const auto opened = Clock::now();
+    // Each game's tile on the PS5 home screen follows the games folder (homescreen.h).
+    Eden::HomeScreen::SyncInBackground();
     // What Settings > Video asks for, and what opened.
     int output = std::clamp(Eden::LoadPreferences().output, 0, static_cast<int>(std::size(Eden::kOutputKeys)) - 1);
     int output_open = output;
